@@ -1,5 +1,7 @@
 return {
-  -- Mason Configuration
+  -- Mason UI polish (icons + keymap).
+  -- NOTE: LSP servers themselves are installed/managed by LazyVim's language
+  -- extras (see lazyvim.json). We don't hand-wire servers here anymore.
   {
     "mason-org/mason.nvim",
     cmd = "Mason",
@@ -16,97 +18,23 @@ return {
     },
   },
 
-  -- Mason-LSPConfig Configuration
-  {
-    "mason-org/mason-lspconfig.nvim",
-    opts = {
-      ensure_installed = {
-        "jdtls",
-      },
-      automatic_installation = true,
-    },
-  },
-
-  -- LSP Configuration
-  -- NOTE: Keymaps for LSP live in `lua/config/keymaps.lua` as the single source of truth.
-  -- Do not re-register an `LspAttach` autocmd here — it causes augroup collisions.
-  {
-    "neovim/nvim-lspconfig",
-    dependencies = {
-      "mfussenegger/nvim-jdtls",
-    },
-    opts = {
-      servers = {
-        jdtls = {},
-      },
-      setup = {
-        jdtls = function()
-          return true
-        end,
-      },
-    },
-  },
-
-  -- JDTLS Configuration
+  -- =========================================================================
+  -- Java (JDTLS) — fully owned by LazyVim's `lang.java` extra.
+  -- =========================================================================
+  -- We ONLY *extend* the extra here to raise the JVM heap for large
+  -- Spring Boot projects. We deliberately DO NOT define `cmd`, `root_dir`,
+  -- `settings`, or call `jdtls.start_or_attach()` — the extra does all of that
+  -- correctly (project import, capabilities, DAP, tests). Re-defining it here
+  -- is what previously broke cross-file `gd`.
   {
     "mfussenegger/nvim-jdtls",
-    ft = "java",
-    config = function()
-      local jdtls = require("jdtls")
-      local jdtls_path = vim.fn.stdpath("data") .. "/mason/packages/jdtls"
-      local config_path = jdtls_path .. "/config_" .. (
-        vim.fn.has("mac") == 1 and "mac" or
-        vim.fn.has("unix") == 1 and "linux" or
-        "win"
-      )
-      local launcher_jar = vim.fn.glob(jdtls_path .. "/plugins/org.eclipse.equinox.launcher_*.jar")
-      local workspace_dir = vim.fn.stdpath("data") .. "/workspace/" .. vim.fn.fnamemodify(vim.fn.getcwd(), ":p:h:t")
-
-      local config = {
-        cmd = {
-          "java",
-          "-Declipse.application=org.eclipse.jdt.ls.core.id1",
-          "-Dosgi.bundles.defaultStartLevel=4",
-          "-Declipse.product=org.eclipse.jdt.ls.core.product",
-          "-Dlog.protocol=true",
-          "-Dlog.level=ALL",
-          "-Xmx4g",
-          "-Xms512m",
-          "-XX:+UseG1GC",
-          "-XX:+UseStringDeduplication",
-          "--add-modules=ALL-SYSTEM",
-          "--add-opens", "java.base/java.util=ALL-UNNAMED",
-          "--add-opens", "java.base/java.lang=ALL-UNNAMED",
-          "-jar", launcher_jar,
-          "-configuration", config_path,
-          "-data", workspace_dir,
-        },
-        root_dir = require("jdtls.setup").find_root({ ".git", "mvnw", "gradlew", "pom.xml", "build.gradle" }),
-        settings = {
-          java = {
-            signatureHelp = { enabled = true },
-            completion = {
-              favoriteStaticMembers = {},
-              filteredTypes = {},
-            },
-            sources = {
-              organizeImports = {
-                starThreshold = 9999,
-                staticStarThreshold = 9999,
-              },
-            },
-            codeGeneration = {
-              toString = {
-                template = "${object.className}{${member.name()}=${member.value}, ${otherMembers}}",
-              },
-              useBlocks = true,
-            },
-          },
-        },
-      }
-
-      vim.fn.mkdir(workspace_dir, "p")
-      jdtls.start_or_attach(config)
+    opts = function(_, opts)
+      opts.cmd = opts.cmd or { vim.fn.exepath("jdtls") }
+      vim.list_extend(opts.cmd, {
+        "--jvm-arg=-Xmx4g",
+        "--jvm-arg=-XX:+UseG1GC",
+        "--jvm-arg=-XX:+UseStringDeduplication",
+      })
     end,
   },
 }
