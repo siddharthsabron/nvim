@@ -96,6 +96,9 @@ vim.keymap.set("n", "<leader>lr", ":Leet run<cr>", { desc = "Run LeetCode Soluti
 -- 📤 Submit LeetCode Solution - Submit your solution for evaluation
 vim.keymap.set("n", "<leader>ls", ":Leet submit<cr>", { desc = "Submit LeetCode Solution" })
 
+-- 🐙 Push LeetCode Solution to GitHub - Commits and pushes current solution
+vim.keymap.set("n", "<leader>lg", "<cmd>LeetcodeGithubPush<cr>", { desc = "Push LeetCode solution to GitHub" })
+
 -- =============================================================================
 -- QUICK REFERENCE GUIDE
 -- =============================================================================
@@ -123,7 +126,8 @@ vim.keymap.set("n", "<leader>ls", ":Leet submit<cr>", { desc = "Submit LeetCode 
 -- 🧮 LEETCODE:
 --   - <leader>lc (open panel)
 --   - <leader>lr (run solution)
---   - <leader>ls (submit solution)
+--   - <leader>ls (submit to LeetCode)
+--   - <leader>lg (push solution to GitHub  ← NEW)
 --
 -- Note: <leader> is typically the space bar
 -- All LSP keymaps require a language server to be installed and active
