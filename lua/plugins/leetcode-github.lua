@@ -18,20 +18,26 @@ local REPO_DIR = vim.fn.expand("~/.local/share/nvim/leetcode-github")
 -- Sub-folder inside the repo where solutions go
 local REPO_LEET_DIR = REPO_DIR .. "/leetcode"
 
---- Show a Neovim notification
+--- Show a Neovim notification — always via vim.schedule so snacks/notify renders it
 local function notify(msg, level)
-  vim.notify("[LeetCode→GitHub] " .. msg, level or vim.log.levels.INFO)
+  vim.schedule(function()
+    vim.notify("[LeetCode→GitHub] " .. msg, level or vim.log.levels.INFO, {
+      title = "LeetCode → GitHub",
+    })
+  end)
 end
 
---- Run a shell command, return { ok, output }
+--- Run a shell command synchronously, return ok (bool) and full output string
 local function run(cmd)
   local handle = io.popen(cmd .. " 2>&1")
   if not handle then
     return false, "Failed to open process"
   end
   local result = handle:read("*a")
-  local ok = handle:close()
-  return ok, result or ""
+  handle:close()
+  -- check exit code via a separate call
+  local rc = os.execute(cmd .. " 2>/dev/null")
+  return (rc == 0 or rc == true), result or ""
 end
 
 --- The main push function
@@ -40,7 +46,7 @@ local function leetcode_github_push()
   local bufpath = vim.fn.expand("%:p")
   if not bufpath:find(LEET_DIR, 1, true) then
     notify(
-      "Not a LeetCode solution file.\nExpected path inside: " .. LEET_DIR,
+      "Not a LeetCode solution file.\nOpen a problem via <leader>lc first.",
       vim.log.levels.WARN
     )
     return
@@ -49,9 +55,7 @@ local function leetcode_github_push()
   -- 2. Guard: repo must exist
   if vim.fn.isdirectory(REPO_DIR) == 0 then
     notify(
-      "GitHub repo not found at " .. REPO_DIR
-        .. "\nRun: git clone git@github.com:siddharthsabron/thealgorithm.git "
-        .. REPO_DIR,
+      "GitHub repo not found at " .. REPO_DIR,
       vim.log.levels.ERROR
     )
     return
@@ -64,41 +68,54 @@ local function leetcode_github_push()
   local filename = vim.fn.expand("%:t")  -- e.g. "1.two-sum.java"
   local dest     = REPO_LEET_DIR .. "/" .. filename
 
-  local ok, err = run(string.format("cp %q %q", bufpath, dest))
-  if not ok then
-    notify("Copy failed: " .. err, vim.log.levels.ERROR)
+  -- use vim.fn.system for copy (more reliable inside nvim)
+  vim.fn.system({"cp", bufpath, dest})
+  if vim.v.shell_error ~= 0 then
+    notify("Copy failed for: " .. filename, vim.log.levels.ERROR)
     return
   end
 
-  -- 5. Build commit message from filename  e.g. "feat: two-sum [java]"
+  -- 5. Build commit message  e.g. "feat: two-sum [java]"
   local slug = filename:match("^%d+%.(.+)%.[^%.]+$") or filename
   local ext  = filename:match("%.([^%.]+)$") or "?"
   local msg  = string.format("feat: %s [%s]", slug, ext)
 
-  -- 6. git pull (fast-forward) to avoid conflicts
-  run(string.format("cd %q && git pull --ff-only 2>&1", REPO_DIR))
+  -- 6. git pull (fast-forward) — ignore errors silently
+  vim.fn.system("cd " .. vim.fn.shellescape(REPO_DIR) .. " && git pull --ff-only 2>&1")
 
-  -- 7. git add → commit → push
-  local cmds = {
-    string.format("cd %q && git add leetcode/%s", REPO_DIR, filename),
-    string.format("cd %q && git commit -m %q", REPO_DIR, msg),
-    string.format("cd %q && git push origin HEAD 2>&1", REPO_DIR),
-  }
+  -- 7. git add
+  vim.fn.system({
+    "git", "-C", REPO_DIR, "add", "leetcode/" .. filename,
+  })
 
-  for _, cmd in ipairs(cmds) do
-    ok, err = run(cmd)
-    if not ok then
-      if err:find("nothing to commit") then
-        notify("Nothing new to commit — file already up to date.", vim.log.levels.WARN)
-        return
-      end
-      notify("Git error:\n" .. err, vim.log.levels.ERROR)
-      return
+  -- 8. git commit
+  local commit_out = vim.fn.system({
+    "git", "-C", REPO_DIR, "commit", "-m", msg,
+  })
+  local commit_rc = vim.v.shell_error
+
+  if commit_rc ~= 0 then
+    if commit_out:find("nothing to commit") then
+      notify("Already up to date — no changes to push.", vim.log.levels.WARN)
+    else
+      notify("Commit failed:\n" .. commit_out, vim.log.levels.ERROR)
     end
+    return
   end
 
-  -- 8. Success notification
-  notify('Pushed "' .. filename .. '" → github:siddharthsabron/thealgorithm')
+  -- 9. git push
+  local push_out = vim.fn.system({
+    "git", "-C", REPO_DIR, "push", "origin", "HEAD",
+  })
+  local push_rc = vim.v.shell_error
+
+  if push_rc ~= 0 then
+    notify("Push failed:\n" .. push_out, vim.log.levels.ERROR)
+    return
+  end
+
+  -- 10. Success
+  notify("✓ Pushed  [" .. filename .. "]  to github:siddharthsabron/thealgorithm", vim.log.levels.INFO)
 end
 
 -- Register as a user command (:LeetcodeGithubPush)
